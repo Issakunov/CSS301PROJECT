@@ -3,129 +3,95 @@ package org.example.dao;
 import org.example.exception.StudentNotFoundException;
 import org.example.models.Student;
 
+import javax.swing.*;
 import java.io.*;
 import java.util.*;
 
 public class StudentService {
-    private final List<Student> studentDataBase;
+    private List<Student> studentDatabase = new ArrayList<>();
 
     public StudentService() {
-        this.studentDataBase = new ArrayList<>();
+        loadStudentsFromFile();
     }
 
     // Add a student
-    public String addStudent(Scanner scanner) {
+    public synchronized String addStudent(Student student) {
         try {
-            scanner.nextLine(); // Consume any leftover newline
+            int studentID = generateUniqueID();
+            student.setStudentID(studentID);
 
-            System.out.print("Enter first name: ");
-            String firstName = scanner.nextLine();
-            System.out.println();
-
-            System.out.print("Enter last name: ");
-            String lastName = scanner.nextLine();
-            System.out.println();
-
-            System.out.print("Enter age: ");
-            int age = scanner.nextInt();
-            scanner.nextLine(); // Consume the leftover newline after reading an integer
-            System.out.println();
-
-            System.out.print("Enter course: ");
-            String course = scanner.nextLine();
-            System.out.println();
-
-            int studentID = 1;
-            while (findStudentById(studentID).isPresent()) {
-                studentID++;
-            }
-
-            studentDataBase.add(new Student(studentID, firstName, lastName, age, course));
-//            saveStudentsToFile();
-            return "Student added successfully";
-        } catch (InputMismatchException e) {
-            return "Invalid input! Please enter correct data types.";
+            studentDatabase.add(student);
+            saveStudentsToFile();
+            return "Student added successfully.";
         } catch (Exception e) {
-            return "Student was not added due to an unexpected error!";
+            return "Student was not added due to an unexpected error: " + e.getMessage();
         }
     }
 
-    // Clear all students
-    public String clearAllStudents() {
-        try {
-            studentDataBase.clear();
-//          saveStudentsToFile();
-            return "All student records have been cleared successfully.";
-        } catch (InputMismatchException e) {
-        return "Error clearing students : " + e.getMessage();
-    }
+    // Generate a unique ID for new students
+    private int generateUniqueID() {
+        int studentID = 1;
+        while (findStudentById(studentID).isPresent()) {
+            studentID++;
+        }
+        return studentID;
     }
 
+    // Clear all students
+    public synchronized String clearAllStudents() {
+        try {
+            studentDatabase.clear();
+            saveStudentsToFile();
+            return "All student records have been cleared successfully.";
+        } catch (Exception e) {
+            return "Error clearing students: " + e.getMessage();
+        }
+    }
 
     // View all students
-    public List<Student> getAllStudents() {
-        return new ArrayList<>(studentDataBase);
+    public synchronized List<Student> getAllStudents() {
+        return new ArrayList<>(studentDatabase);
     }
 
-    // View all SORTED students
-    public List<Student> getAllSortedStudents() {
-        Collections.sort(studentDataBase);
-        return new ArrayList<>(studentDataBase);
+    // View all sorted students
+    public synchronized List<Student> getAllSortedStudents() {
+        List<Student> sortedStudents = new ArrayList<>(studentDatabase);
+        sortedStudents.sort(Comparator.comparing(Student::getStudentID));
+        return sortedStudents;
     }
 
     // Find student by ID
-    public Optional<Student> findStudentById(int id) {
-        return studentDataBase.stream()
+    public synchronized Optional<Student> findStudentById(int id) {
+        return studentDatabase.stream()
                 .filter(student -> student.getStudentID() == id)
                 .findFirst();
     }
 
     // Update student details
-    public String updateStudentDetails(int id, Scanner scanner) {
+    public synchronized String updateStudentDetails(int id, String firstName, String lastName, int age, String course) {
         Optional<Student> studentOpt = findStudentById(id);
         if (studentOpt.isPresent()) {
-
-            scanner.nextLine(); // Consume any leftover newline from previous input
-
-            System.out.print("Enter updated firstname: ");
-            String updatedFirstName = scanner.nextLine();
-            System.out.println();
-
-            System.out.print("Enter updated last name: ");
-            String updatedLastName = scanner.nextLine();
-            System.out.println();
-
-            System.out.print("Enter updated age: ");
-            int updatedAge = scanner.nextInt();
-            scanner.nextLine(); // Consume the leftover newline after reading an integer
-            System.out.println();
-
-            System.out.print("Enter updated course: ");
-            String updatedCourse = scanner.nextLine();
-            System.out.println();
-
             Student existingStudent = studentOpt.get();
-            existingStudent.setFirstName(updatedFirstName);
-            existingStudent.setLastName(updatedLastName);
-            existingStudent.setAge(updatedAge);
-            existingStudent.setCourse(updatedCourse);
+            existingStudent.setFirstName(firstName);
+            existingStudent.setLastName(lastName);
+            existingStudent.setAge(age);
+            existingStudent.setCourse(course);
 
-//            saveStudentsToFile(); // Save updated list to file
-            return "Student details updated successfully";
+            saveStudentsToFile();
+            return "Student details updated successfully.";
         } else {
             return "Student with ID " + id + " not found!";
         }
     }
 
-
     // Delete a student
-    public String deleteStudentByID(int id) {
+    public synchronized String deleteStudentByID(int id) {
         try {
             Optional<Student> studentOpt = findStudentById(id);
             if (studentOpt.isPresent()) {
-                studentDataBase.remove(studentOpt.get());
-                saveStudentsToFile(); // Save updated list to file
-                return "Student deleted successfully";
+                studentDatabase.remove(studentOpt.get());
+                saveStudentsToFile();
+                return "Student deleted successfully.";
             } else {
                 throw new StudentNotFoundException("Student with ID " + id + " not found!");
             }
@@ -134,52 +100,51 @@ public class StudentService {
         }
     }
 
-    // Save students to file
     // Save students to a text file
-    private void saveStudentsToFile() {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("students.txt"))) {
-            for (Student student : studentDataBase) {
-                writer.write(formatStudentData(student));
-                writer.newLine();
-            }
-        } catch (IOException e) {
-            System.err.println("Error saving students to file: " + e.getMessage());
-        }
-    }
-
-    /*
-     * This method is not in use after switching to project phase 2
-     * */
-    // Load students from a text file
-    private List<Student> loadStudentsFromFile() {
-        List<Student> students = new ArrayList<>();
-        File file = new File("students.txt");
-        if (file.exists()) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Student student = parseStudentData(line);
-                    students.add(student);
+    private synchronized void saveStudentsToFile() {
+        new Thread(() -> {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter("students.txt"))) {
+                for (Student student : studentDatabase) {
+                    writer.write(formatStudentData(student));
+                    writer.newLine();
                 }
+                System.out.println("Students saved to file successfully.");
             } catch (IOException e) {
-                System.err.println("Error loading students from file: " + e.getMessage());
+                System.err.println("Error saving students to file: " + e.getMessage());
             }
-        }
-        return students; // Return loaded list of students
+        }).start();
     }
 
-    /*
-     * This method is not in use after switching to project phase 2
-     * */
+
+    // Load students from a text file
+    private synchronized void loadStudentsFromFile() {
+        new Thread(() -> {
+            studentDatabase.clear();
+            File file = new File("students.txt");
+            if (file.exists()) {
+                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        Student student = parseStudentData(line);
+                        studentDatabase.add(student);
+                    }
+                    System.out.println("Students loaded from file successfully.");
+                } catch (IOException e) {
+                    System.err.println("Error loading students from file: " + e.getMessage());
+                }
+            } else {
+                System.out.println("File does not exist. No students to load.");
+            }
+        }).start();
+    }
+
+
     // Helper method to format a student's data as a string
     private String formatStudentData(Student student) {
         return String.format("%d,%s,%s,%d,%s",
                 student.getStudentID(), student.getFirstName(), student.getLastName(), student.getAge(), student.getCourse());
     }
 
-    /*
-    * This method is not in use after switching to project phase 2
-    * */
     // Helper method to parse a student's data from a formatted string
     private Student parseStudentData(String data) {
         String[] parts = data.split(",");
@@ -190,5 +155,4 @@ public class StudentService {
         String course = parts[4];
         return new Student(id, firstName, lastName, age, course);
     }
-
 }
